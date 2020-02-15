@@ -1,0 +1,97 @@
+How to describe performance issue in relational database?
+
+For Oracle Database provide this information:
+
+Describe the symptoms of the problem
+
+Describe the behavior that cause the problem. Is the behavior of the query stable or does the problem occurs only sometimes, with specific parameters or simple random. Can you reproduce this behavior in an IDE (e.g. SQL Developer)?
+
+Describe the environment
+
+Define the exact version of Oracle
+
+ select * from v$version
+Describe how you connect to the database: driver, ORM, programming language. Provide names and/or version numbers.
+
+Describe the query
+
+Post the query text. Try to simplify - show a minimal reproducible example.
+
+Example - you problematic query joins 10 tables. Check if you see the same symptoms in a query with 9 or 8 joins. Step down until you see the problems and show only the reduced query.
+
+Yes, this is costly, but it highly increase the chance that you receives support! The smaller the query is the higher it attracts the supporters.
+
+Describe the execution plan
+
+To get the execution plan run this statement (substitute your query text)
+
+ EXPLAIN PLAN  SET STATEMENT_ID = '<some_id>' into   plan_table  FOR
+     select * from ....   -- your query here ;
+The execution plan is stored in the PLAN_TABLE, to see it run this query
+
+ SELECT * FROM table(DBMS_XPLAN.DISPLAY('plan_table', '<some_id>','ALL')); 
+Show the complete result (not only the table with the execution plan). Extreme important may be the predicate section and the notes bellow.
+
+Example for select * from dual where dummy = :1;
+
+Plan hash value: 272002086
+
+--------------------------------------------------------------------------
+| Id  | Operation         | Name | Rows  | Bytes | Cost (%CPU)| Time     |
+--------------------------------------------------------------------------
+|   0 | SELECT STATEMENT  |      |     1 |     2 |     2   (0)| 00:00:01 |
+|*  1 |  TABLE ACCESS FULL| DUAL |     1 |     2 |     2   (0)| 00:00:01 |
+--------------------------------------------------------------------------
+
+Query Block Name / Object Alias (identified by operation id):
+-------------------------------------------------------------
+
+   1 - SEL$1 / DUAL@SEL$1
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   1 - filter("DUMMY"=:1)
+
+Column Projection Information (identified by operation id):
+-----------------------------------------------------------
+
+   1 - "DUMMY"[VARCHAR2,1]
+Do not cut and paste the graphical result of your IDE explain plan.
+
+Is this execution plan the real one that is executed?
+
+Unfortunately not always. There are several reasons the explained execution plan may differ from the real one.
+
+If you are in doubts (especially when you see a good plan, but the query runs bad) you may extract the plan from the DB cache providing a SQL_ID.
+
+ SELECT t.* FROM  table(DBMS_XPLAN.DISPLAY_CURSOR('<SQL_ID>',null,'ALL')) t; 
+The SQL_ID for a query that is currently running (or was running shortly and is still cached) can be found with text match and/or the database user:
+
+select sql_id, sql_fulltext from v$sql a where 
+ lower(sql_text) like lower('%<some identifying part of the query text>%') 
+  and parsing_schema_name = '<user running the query>';
+If you have AWR license, you may get the execution plan from there, even for queries running in history.
+
+SELECT t.*
+FROM  table(DBMS_XPLAN.DISPLAY_AWR('10u2rj016s96k'  )) t;
+The SQL_ID can be found using
+
+select sql_id, sql_text 
+from dba_hist_sqltext a 
+where lower(sql_text) like lower('%<some identifying part of the query text>%')
+Describe the data
+
+Show the DDL of the tables and indexes on those tables.
+
+Mention if the optimizer statistics are gathered recently and show the used dbms_stats gather statement.
+
+For the critical table(s) provide information about segment size, row number, partitioning,...
+
+For the columns used in access or joins provide information about number of distinct values. Are the values evenly distributed or skew (e.g. a small number of values that occurs very often and a large number of rare values). Do you define histograms?
+
+Anything Else?
+
+Of course this is the basics only and other information may still be required, such as system statistics or optimizer parameters. But once again try to provide the minimal information that (you thing) can identify the problem. Post additional information upon request.
+
+Good luck!
